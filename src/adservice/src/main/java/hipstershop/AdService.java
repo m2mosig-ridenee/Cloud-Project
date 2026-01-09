@@ -170,7 +170,7 @@ public final class AdService {
     Ad watch =
         Ad.newBuilder()
             .setRedirectUrl("/product/1YMWWN1N4O")
-            .setText("Watch for sale. Buy one, get second kit for free")
+            .setText("V2- Watch for sale. Buy one, get second kit for free")
             .build();
     Ad mug =
         Ad.newBuilder()
@@ -215,7 +215,7 @@ public final class AdService {
     logger.info("See https://github.com/GoogleCloudPlatform/microservices-demo/issues/422 for more info.");
 
     // TODO(arbrown) Implement OpenTelemetry tracing
-    
+
     logger.info("Tracing enabled - Stackdriver exporter initialized.");
   }
 
