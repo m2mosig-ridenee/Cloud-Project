@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  # 1) Stop deploying the load generator
+  - path: delete-loadgenerator-deploy.yaml
+  - path: delete-loadgenerator-sa.yaml
+
+  # 2) Reduce CPU requests for 2 less critical services
+  - path: patch-adservice-cpu.yaml
+  - path: patch-recommendationservice-cpu.yaml
