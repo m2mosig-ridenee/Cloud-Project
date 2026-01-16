@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reuse your working overlay (removed loadgenerator + reduced CPU)
+resources:
+  - ../m2-gke-standard-small
+
+  - adservice-v2-deployment.yaml
+  - istio-adservice-destinationrule.yaml
+  - istio-adservice-virtualservice.yaml
+
+patches:
+  - path: patch-adservice-v1-label.yaml

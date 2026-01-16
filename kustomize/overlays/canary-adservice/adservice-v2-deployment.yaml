@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice-v2
+  labels:
+    app: adservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adservice
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: adservice
+        version: v2
+    spec:
+      serviceAccountName: adservice
+      containers:
+      - name: server
+        image: europe-west6-docker.pkg.dev/m2-cloud-computing-478123/online-boutique/adservice:v2
+        ports:
+        - containerPort: 9555
+        env:
+        - name: PORT
+          value: "9555"
