@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euo pipefail
+
+FRONTEND_ADDR="${frontend_addr}"
+USERS="${users}"
+RATE="${rate}"
+DURATION="${duration}"
+EXPORT_CSV="${export_csv}"
+ENABLE_UI="${enable_locust_ui}"
+
+IMAGE="us-central1-docker.pkg.dev/google-samples/microservices-demo/loadgenerator:v0.10.4"
+
+mkdir -p /var/locust
+
+# Stop old container if any (reboots, re-apply)
+docker rm -f loadgen || true
+
+if [ "$ENABLE_UI" = "true" ]; then
+  # UI mode (not headless)
+  docker run -d --name loadgen -p 8089:8089 \
+    --entrypoint locust \
+    "$IMAGE" \
+    -f /loadgen/locustfile.py \
+    --host="http://$FRONTEND_ADDR"
+else
+  # Headless mode
+  if [ "$EXPORT_CSV" = "true" ]; then
+    docker run -d --name loadgen \
+      -v /var/locust:/results \
+      --entrypoint locust \
+      "$IMAGE" \
+      -f /loadgen/locustfile.py \
+      --host="http://$FRONTEND_ADDR" \
+      --headless -u "$USERS" -r "$RATE" -t "$DURATION" \
+      --csv /results/run1
+  else
+    docker run -d --name loadgen \
+      --entrypoint locust \
+      "$IMAGE" \
+      -f /loadgen/locustfile.py \
+      --host="http://$FRONTEND_ADDR" \
+      --headless -u "$USERS" -r "$RATE" -t "$DURATION"
+  fi
+fi
+
+echo "Load generator started. Check: docker logs -f loadgen"
