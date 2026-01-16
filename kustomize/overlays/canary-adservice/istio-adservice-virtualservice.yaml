@@ -1,0 +1,23 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: adservice
+spec:
+  hosts:
+  - adservice
+  http:
+  - match:
+    - port: 9555
+    route:
+    - destination:
+        host: adservice
+        subset: v1
+        port:
+          number: 9555
+      weight: 0
+    - destination:
+        host: adservice
+        subset: v2
+        port:
+          number: 9555
+      weight: 100
