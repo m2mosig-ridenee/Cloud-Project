@@ -6,7 +6,7 @@ This repository contains the code and configuration used to deploy and manage th
 
 **Note:** The application code and base Kubernetes manifests come from the upstream repository GoogleCloudPlatform/microservices-demo. This repo adds overlays, IaC, and scripts/configs needed for the lab.
 
-\`\`\`text
+```text
 .
 ├── kustomize/
 │   ├── base/                                   # Base manifests (upstream)
@@ -25,9 +25,10 @@ This repository contains the code and configuration used to deploy and manage th
     ├── frontend-alert.yaml                     # Saturation alert rules
     ├── redis-monitor.yaml                      # Redis ServiceMonitor
     └── patched-redis-cart.yaml                 # Redis sidecar deployment
-\`\`\`
 
+```
 ## Reproducibility instructions
+
 
 ### SECTION 1 — Deploy Online Boutique on GKE + Locust load testing
 
