@@ -12,7 +12,7 @@ This repository contains the code and configuration used to deploy and manage th
 ├── kustomize/
 │   ├── base/                                   # Base manifests (upstream)
 │   └── overlays/
-│       ├── m2-gke-standard-small/               # Lab overlay (GKE deployment)
+│       ├── m2-gke-standard-small/              # Lab overlay (GKE deployment)
 │       ├── canary-adservice/                   # Manual canary with Istio (v1/v2)
 │       ├── flagger-adservice/                  # Automated canary with Flagger (v3)
 │       └── autoscaling-frontend/               # Frontend HPA configuration
@@ -136,7 +136,7 @@ terraform init
 project_id       = "m2-cloud-computing-478123"
 region           = "europe-west6"
 zone             = "europe-west6-a"
-frontend_addr    = "34.65.171.116"   # IMPORTANT: replace with the actual FRONTEND_IP
+frontend_addr    = "34.65.171.116"   # Replace with the actual FRONTEND_IP
 users            = 20
 rate             = 5
 duration         = "2m"
@@ -220,13 +220,6 @@ kubectl delete -k kustomize/overlays/m2-gke-standard-small
 gcloud container clusters delete boutique-cluster
 ```
 
-#### Notes:
-
-- Overlay `m2-gke-standard-small`:
-  - deletes in-cluster loadgenerator (Deployment + ServiceAccount)
-  - reduces CPU requests for adservice and recommendationservice
-- Load generator VM runs Locust automatically from a startup script and can export CSV to `/var/locust`
-
 ### SECTION 2 — Reproducibility: Manual Canary release with Istio (adservice v1/v2)
 
 #### Prerequisites
@@ -242,8 +235,10 @@ kubectl label namespace default istio-injection=enabled --overwrite
 #### 1) Build & push adservice:v2 with Google Cloud Build (`cloudbuild.yaml`):
 
 ```bash
+git checkout adservice-v2
 export IMAGE_URI="europe-west6-docker.pkg.dev/m2-cloud-computing-478123/online-boutique/adservice:v2"
 gcloud builds submit ./src/adservice --tag "$IMAGE_URI"
+git checkout master
 ```
 
 #### 2) Deploy canary resources (v1 + v2 + Istio routing)
@@ -256,8 +251,6 @@ kubectl get destinationrule adservice -o yaml
 ```
 
 #### 3) Generate traffic (to observe split)
-
-**Example (local Locust):**
 
 ```bash
 FRONTEND_IP=$(kubectl get svc frontend-external -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -288,7 +281,7 @@ Update VirtualService weights (in overlay) to v1=0, v2=100 and apply:
 kubectl apply -k kustomize/overlays/canary-adservice
 ```
 
-**Optional:** scale down v1 once 100% is on v2:
+scale down v1 once 100% is on v2:
 
 ```bash
 kubectl scale deploy adservice --replicas=0
@@ -314,7 +307,7 @@ kubectl scale deploy adservice --replicas=1
 kubectl delete -k kustomize/overlays/canary-adservice
 ```
 
-### SECTION 3 — Reproducibility: Automated Canary + Rollback with Flagger (adservice v3)
+### SECTION 3 — Reproducibility: Automated Canary + Rollback with Flagger (adservice-v3)
 
 #### 0) Prerequisites
 
@@ -358,7 +351,7 @@ kubectl delete destinationrule adservice --ignore-not-found
 kubectl apply -k kustomize/overlays/flagger-adservice
 
 # or apply the canary directly:
-kubectl apply -f kustomize/overlays/flagger-adservice/adservice-canary.yaml
+# kubectl apply -f kustomize/overlays/flagger-adservice/adservice-canary.yaml
 ```
 
 **Verify Flagger created services and routing:**
@@ -399,12 +392,15 @@ gcloud compute ssh loadgen-vm --zone europe-west6-a --command "docker ps"
 
 ```bash
 cd ~/microservices-demo
+git checkout adservice-v3
 PROJECT_ID="m2-cloud-computing-478123"
 IMAGE_V3="europe-west6-docker.pkg.dev/${PROJECT_ID}/online-boutique/adservice:v3"
 
 gcloud builds submit . \
   --config cloudbuild.yaml \
   --substitutions=_IMAGE_URI="$IMAGE_V3"
+
+git chechout master
 ```
 
 #### 6) Trigger Flagger analysis (deploy v3)
@@ -420,13 +416,6 @@ kubectl get canary adservice -w
 kubectl describe canary adservice | tail -n 60
 ```
 
-#### 7) Expected outcome: automatic rollback
-
-With sustained traffic, Flagger should:
-- shift traffic gradually to canary
-- detect bad metrics ( request duration too high)
-- rollback and route traffic back to `adservice-primary`
-
 **Confirm rollback:**
 
 ```bash
@@ -434,24 +423,7 @@ kubectl describe canary adservice | egrep -i "failed|rollback|promotion|weight"
 kubectl get pods | grep adservice
 ```
 
-#### 8) Reset / Retest
-
-Ensure traffic is still running.
-
-**Re-apply v2 baseline:**
-
-```bash
-kubectl -n default set image deploy/adservice server="$IMAGE_V2"
-kubectl rollout status deploy/adservice
-```
-
-**Re-deploy v3 to trigger canary again:**
-
-```bash
-kubectl -n default set image deploy/adservice server="$IMAGE_V3"
-```
-
-#### 9) Cleanup (optional)
+#### 7) Cleanup
 
 **Stop load generator:**
 
@@ -460,7 +432,7 @@ cd infra/loadgen-vm
 terraform destroy -auto-approve
 ```
 
-**Remove Flagger objects (optional):**
+**Remove Flagger objects:**
 
 ```bash
 kubectl delete canary adservice --ignore-not-found
@@ -469,9 +441,7 @@ kubectl delete virtualservice adservice --ignore-not-found
 kubectl delete destinationrule adservice-primary adservice-canary --ignore-not-found
 ```
 
-### SECTION 4 — Reproducibility: Autoscaling experiment (HPA + Cluster Autoscaler)
-
-This section assumes the autoscaling configuration (HPA overlay / manifests) already exists in the repo. The goal here is to re-run the experiment and capture evidence.
+### SECTION 4 — Reproducibility: Autoscaling experiment (HPA + Cluster Autoscaler).
 
 #### A) Validate prerequisites (metrics + frontend requests)
 
@@ -512,7 +482,7 @@ kubectl get pods -l app=frontend -w
 
 #### C) Enable GKE Cluster Autoscaler (node pool)
 
-**Identify the node pool name (don't assume):**
+**Identify the node pool name:**
 
 ```bash
 CLUSTER_NAME=boutique-cluster
@@ -540,11 +510,6 @@ gcloud container node-pools update "$POOL_NAME" \
 kubectl get nodes -w
 kubectl get events --sort-by=.lastTimestamp | tail -n 30
 ```
-
-**Expected behavior:**
-- HPA increases frontend replicas under load
-- if pods become Pending, Cluster Autoscaler adds nodes
-- pods schedule once capacity exists
 
 #### D) Re-run load tests (prove autoscaling works)
 
