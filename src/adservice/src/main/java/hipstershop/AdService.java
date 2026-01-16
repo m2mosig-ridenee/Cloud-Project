@@ -93,12 +93,6 @@ public final class AdService {
     @Override
     public void getAds(AdRequest req, StreamObserver<AdResponse> responseObserver) {
 
-        // try {
-        //     Thread.sleep(3000); // v3 defect: artificial latency
-        // } catch (InterruptedException ie) {
-        //     Thread.currentThread().interrupt();
-        // }
-
         AdService service = AdService.getInstance();
         try {
         List<Ad> allAds = new ArrayList<>();
