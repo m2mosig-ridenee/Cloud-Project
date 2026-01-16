@@ -6,39 +6,26 @@ This repository contains the code and configuration used to deploy and manage th
 
 **Note:** The application code and base Kubernetes manifests come from the upstream repository GoogleCloudPlatform/microservices-demo. This repo adds overlays, IaC, and scripts/configs needed for the lab.
 
-### 1) GKE deployment (Kustomize)
-
-**Base manifests (upstream):**
-- `kustomize/base/`
-
-**Lab overlay (scheduling fixes + removes in-cluster loadgenerator):**
-- `kustomize/overlays/m2-gke-standard-small/`
-  - Removes in-cluster loadgenerator
-  - Reduces CPU requests for selected services (adservice, recommendationservice)
-
-### 2) Local load generator (Docker)
-
-- `src/loadgenerator/`
-  - Dockerfile + Locust scenario to run Locust outside the cluster.
-
-### 3) Automated load generator on GCE (Terraform)
-
-- `infra/loadgen-vm/`
-  - Terraform to provision a GCE VM and run Locust automatically via startup script.
-
-### 4) Canary overlays
-
-**Manual canary with Istio (v1/v2 split):**
-- `kustomize/overlays/canary-adservice/`
-
-**Automated canary + rollback with Flagger (v3):**
-- `kustomize/overlays/flagger-adservice/`
-  - includes `adservice-canary.yaml` (Flagger Canary CR)
-
-### 4) Canary overlays
-
-**Frontend Horizontal Pod Autoscaler (HPA):**
-- `kustomize/overlays/autoscaling-frontend/`
+\`\`\`text
+.
+├── kustomize/
+│   ├── base/                                   # Base manifests (upstream)
+│   └── overlays/
+│       ├── m2-gke-standard-small/               # Lab overlay (GKE deployment)
+│       ├── canary-adservice/                   # Manual canary with Istio (v1/v2)
+│       ├── flagger-adservice/                  # Automated canary with Flagger (v3)
+│       └── autoscaling-frontend/               # Frontend HPA configuration
+├── src/
+│   └── loadgenerator/                          # Local load generator (Docker)
+│       └── Dockerfile
+├── infra/
+│   └── loadgen-vm/                             # Automated load generator on GCE (Terraform)
+│       └── Terraform configuration files
+└── monitoring/                                 # Custom Prometheus alerts and Redis monitoring
+    ├── frontend-alert.yaml                     # Saturation alert rules
+    ├── redis-monitor.yaml                      # Redis ServiceMonitor
+    └── patched-redis-cart.yaml                 # Redis sidecar deployment
+\`\`\`
 
 ## Reproducibility instructions
 
