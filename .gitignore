@@ -34,3 +34,6 @@ vendor/
 crash.log
 crash.*.log
 .terraform.lock.hcl
+
+!infra/loadgen-vm/loadgen2.tfvars
+!infra/loadgen-vm/terraform.tfvars

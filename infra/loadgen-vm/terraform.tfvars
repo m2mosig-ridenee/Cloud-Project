@@ -1,0 +1,10 @@
+project_id       = "m2-cloud-computing-478123"
+region           = "europe-west1"
+zone             = "europe-west1-b"
+frontend_addr    = "34.34.142.59"
+users            = 1000
+rate             = 60
+duration         = "20m"
+export_csv       = true
+enable_locust_ui = false
+use_spot         = true
