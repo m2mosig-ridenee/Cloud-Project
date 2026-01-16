@@ -1,4 +1,4 @@
-# M2 MOSIG Cloud — Online Boutique on GKE (Standard) + Load Testing + Canary (Istio) + Flagger
+# M2 MOSIG Cloud — Online Boutique on GKE (Standard)
 
 This repository contains the code and configuration used to deploy and manage the Online Boutique microservices demo on Google Kubernetes Engine (GKE) in Standard mode, run Locust load testing outside the cluster (locally or on a GCE VM), perform canary releases for adservice using Istio (manual split) and Flagger (automated canary + rollback), and reproduce autoscaling experiments (HPA + GKE Cluster Autoscaler).
 
