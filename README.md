@@ -8,6 +8,7 @@ This repository contains the code and configuration used to deploy and manage th
 
 ```text
 .
+├── cloudbuild.yaml                             # Cloud Build pipeline (build & push images)
 ├── kustomize/
 │   ├── base/                                   # Base manifests (upstream)
 │   └── overlays/
