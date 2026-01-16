@@ -1,168 +1,606 @@
-<!-- <p align="center">
-<img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="300" alt="Online Boutique" />
-</p> -->
-![Continuous Integration](https://github.com/GoogleCloudPlatform/microservices-demo/workflows/Continuous%20Integration%20-%20Main/Release/badge.svg)
+# M2 MOSIG Cloud — Online Boutique on GKE (Standard) + Load Testing + Canary (Istio) + Flagger
 
-**Online Boutique** is a cloud-first microservices demo application.  The application is a
-web-based e-commerce app where users can browse items, add them to the cart, and purchase them.
+This repository contains the code and configuration used to deploy and manage the Online Boutique microservices demo on Google Kubernetes Engine (GKE) in Standard mode, run Locust load testing outside the cluster (locally or on a GCE VM), perform canary releases for adservice using Istio (manual split) and Flagger (automated canary + rollback), and reproduce autoscaling experiments (HPA + GKE Cluster Autoscaler).
 
-Google uses this application to demonstrate how developers can modernize enterprise applications using Google Cloud products, including: [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine), [Cloud Service Mesh (CSM)](https://cloud.google.com/service-mesh), [gRPC](https://grpc.io/), [Cloud Operations](https://cloud.google.com/products/operations), [Spanner](https://cloud.google.com/spanner), [Memorystore](https://cloud.google.com/memorystore), [AlloyDB](https://cloud.google.com/alloydb), and [Gemini](https://ai.google.dev/). This application works on any Kubernetes cluster.
+## Project structure (where to find the code)
 
-If you’re using this demo, please **★Star** this repository to show your interest!
+**Note:** The application code and base Kubernetes manifests come from the upstream repository GoogleCloudPlatform/microservices-demo. This repo adds overlays, IaC, and scripts/configs needed for the lab.
 
-**Note to Googlers:** Please fill out the form at [go/microservices-demo](http://go/microservices-demo).
+### 1) GKE deployment (Kustomize)
 
-## Architecture
+**Base manifests (upstream):**
+- `kustomize/base/`
 
-**Online Boutique** is composed of 11 microservices written in different
-languages that talk to each other over gRPC.
+**Lab overlay (scheduling fixes + removes in-cluster loadgenerator):**
+- `kustomize/overlays/m2-gke-standard-small/`
+  - Removes in-cluster loadgenerator
+  - Reduces CPU requests for selected services (adservice, recommendationservice)
 
-[![Architecture of
-microservices](/docs/img/architecture-diagram.png)](/docs/img/architecture-diagram.png)
+### 2) Local load generator (Docker)
 
-Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
+- `src/loadgenerator/`
+  - Dockerfile + Locust scenario to run Locust outside the cluster.
 
-| Service                                              | Language      | Description                                                                                                                       |
-| ---------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [frontend](/src/frontend)                           | Go            | Exposes an HTTP server to serve the website. Does not require signup/login and generates session IDs for all users automatically. |
-| [cartservice](/src/cartservice)                     | C#            | Stores the items in the user's shopping cart in Redis and retrieves it.                                                           |
-| [productcatalogservice](/src/productcatalogservice) | Go            | Provides the list of products from a JSON file and ability to search products and get individual products.                        |
-| [currencyservice](/src/currencyservice)             | Node.js       | Converts one money amount to another currency. Uses real values fetched from European Central Bank. It's the highest QPS service. |
-| [paymentservice](/src/paymentservice)               | Node.js       | Charges the given credit card info (mock) with the given amount and returns a transaction ID.                                     |
-| [shippingservice](/src/shippingservice)             | Go            | Gives shipping cost estimates based on the shopping cart. Ships items to the given address (mock)                                 |
-| [emailservice](/src/emailservice)                   | Python        | Sends users an order confirmation email (mock).                                                                                   |
-| [checkoutservice](/src/checkoutservice)             | Go            | Retrieves user cart, prepares order and orchestrates the payment, shipping and the email notification.                            |
-| [recommendationservice](/src/recommendationservice) | Python        | Recommends other products based on what's given in the cart.                                                                      |
-| [adservice](/src/adservice)                         | Java          | Provides text ads based on given context words.                                                                                   |
-| [loadgenerator](/src/loadgenerator)                 | Python/Locust | Continuously sends requests imitating realistic user shopping flows to the frontend.                                              |
+### 3) Automated load generator on GCE (Terraform)
 
-## Screenshots
+- `infra/loadgen-vm/`
+  - Terraform to provision a GCE VM and run Locust automatically via startup script.
 
-| Home Page                                                                                                         | Checkout Screen                                                                                                    |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [![Screenshot of store homepage](/docs/img/online-boutique-frontend-1.png)](/docs/img/online-boutique-frontend-1.png) | [![Screenshot of checkout screen](/docs/img/online-boutique-frontend-2.png)](/docs/img/online-boutique-frontend-2.png) |
+### 4) Canary overlays
 
-## Quickstart (GKE)
+**Manual canary with Istio (v1/v2 split):**
+- `kustomize/overlays/canary-adservice/`
 
-1. Ensure you have the following requirements:
-   - [Google Cloud project](https://cloud.google.com/resource-manager/docs/creating-managing-projects#creating_a_project).
-   - Shell environment with `gcloud`, `git`, and `kubectl`.
+**Automated canary + rollback with Flagger (v3):**
+- `kustomize/overlays/flagger-adservice/`
+  - includes `adservice-canary.yaml` (Flagger Canary CR)
 
-2. Clone the latest major version.
+### 4) Canary overlays
 
-   ```sh
-   git clone --depth 1 --branch v0 https://github.com/GoogleCloudPlatform/microservices-demo.git
-   cd microservices-demo/
-   ```
+**Frontend Horizontal Pod Autoscaler (HPA):**
+- `kustomize/overlays/autoscaling-frontend/`
 
-   The `--depth 1` argument skips downloading git history.
+## Reproducibility instructions
 
-3. Set the Google Cloud project and region and ensure the Google Kubernetes Engine API is enabled.
+### SECTION 1 — Deploy Online Boutique on GKE + Locust load testing
 
-   ```sh
-   export PROJECT_ID=<PROJECT_ID>
-   export REGION=us-central1
-   gcloud services enable container.googleapis.com \
-     --project=${PROJECT_ID}
-   ```
+#### 0) Prerequisites
 
-   Substitute `<PROJECT_ID>` with the ID of your Google Cloud project.
+- Enable required APIs:
 
-4. Create a GKE cluster and get the credentials for it.
+```bash
+gcloud services enable compute.googleapis.com container.googleapis.com
+```
 
-   ```sh
-   gcloud container clusters create-auto online-boutique \
-     --project=${PROJECT_ID} --region=${REGION}
-   ```
+- Configure region/zone:
 
-   Creating the cluster may take a few minutes.
+```bash
+gcloud config set compute/region europe-west6
+gcloud config set compute/zone europe-west6-a
+```
 
-5. Deploy Online Boutique to the cluster.
+#### 1) Create the GKE cluster (Standard mode)
 
-   ```sh
-   kubectl apply -f ./release/kubernetes-manifests.yaml
-   ```
+```bash
+CLUSTER_NAME=boutique-cluster
+gcloud container clusters create "$CLUSTER_NAME"
+gcloud container clusters get-credentials "$CLUSTER_NAME"
+```
 
-6. Wait for the pods to be ready.
+**Verify:**
 
-   ```sh
-   kubectl get pods
-   ```
+```bash
+kubectl get nodes
+```
 
-   After a few minutes, you should see the Pods in a `Running` state:
+#### 2) Get the source code
 
-   ```
-   NAME                                     READY   STATUS    RESTARTS   AGE
-   adservice-76bdd69666-ckc5j               1/1     Running   0          2m58s
-   cartservice-66d497c6b7-dp5jr             1/1     Running   0          2m59s
-   checkoutservice-666c784bd6-4jd22         1/1     Running   0          3m1s
-   currencyservice-5d5d496984-4jmd7         1/1     Running   0          2m59s
-   emailservice-667457d9d6-75jcq            1/1     Running   0          3m2s
-   frontend-6b8d69b9fb-wjqdg                1/1     Running   0          3m1s
-   loadgenerator-665b5cd444-gwqdq           1/1     Running   0          3m
-   paymentservice-68596d6dd6-bf6bv          1/1     Running   0          3m
-   productcatalogservice-557d474574-888kr   1/1     Running   0          3m
-   recommendationservice-69c56b74d4-7z8r5   1/1     Running   0          3m1s
-   redis-cart-5f59546cdd-5jnqf              1/1     Running   0          2m58s
-   shippingservice-6ccc89f8fd-v686r         1/1     Running   0          2m58s
-   ```
+```bash
+git clone https://github.com/GoogleCloudPlatform/microservices-demo.git
+cd microservices-demo
+```
 
-7. Access the web frontend in a browser using the frontend's external IP.
+#### 3) Deploy Online Boutique with the lab Kustomize overlay
 
-   ```sh
-   kubectl get service frontend-external | awk '{print $4}'
-   ```
+**Overlay used:**
+- `kustomize/overlays/m2-gke-standard-small`
 
-   Visit `http://EXTERNAL_IP` in a web browser to access your instance of Online Boutique.
+**Optional render check:**
 
-8. Congrats! You've deployed the default Online Boutique. To deploy a different variation of Online Boutique (e.g., with Google Cloud Operations tracing, Istio, etc.), see [Deploy Online Boutique variations with Kustomize](#deploy-online-boutique-variations-with-kustomize).
+```bash
+kubectl kustomize kustomize/overlays/m2-gke-standard-small | head
+```
 
-9. Once you are done with it, delete the GKE cluster.
+**Apply:**
 
-   ```sh
-   gcloud container clusters delete online-boutique \
-     --project=${PROJECT_ID} --region=${REGION}
-   ```
+```bash
+kubectl apply -k kustomize/overlays/m2-gke-standard-small
+```
 
-   Deleting the cluster may take a few minutes.
+**Wait and verify:**
 
-## Additional deployment options
+```bash
+kubectl get pods -w
+```
 
-- **Terraform**: [See these instructions](/terraform) to learn how to deploy Online Boutique using [Terraform](https://www.terraform.io/intro).
-- **Istio / Cloud Service Mesh**: [See these instructions](/kustomize/components/service-mesh-istio/README.md) to deploy Online Boutique alongside an Istio-backed service mesh.
-- **Non-GKE clusters (Minikube, Kind, etc)**: See the [Development guide](/docs/development-guide.md) to learn how you can deploy Online Boutique on non-GKE clusters.
-- **AI assistant using Gemini**: [See these instructions](/kustomize/components/shopping-assistant/README.md) to deploy a Gemini-powered AI assistant that suggests products to purchase based on an image.
-- **And more**: The [`/kustomize` directory](/kustomize) contains instructions for customizing the deployment of Online Boutique with other variations.
+**Get Frontend external IP:**
 
-## Documentation
+```bash
+kubectl get svc frontend-external
+FRONTEND_IP=$(kubectl get svc frontend-external -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "$FRONTEND_IP"
+curl -I "http://$FRONTEND_IP"
+```
 
-- [Development](/docs/development-guide.md) to learn how to run and develop this app locally.
+#### 4) Local load generator (manual, Docker)
 
-## Demos featuring Online Boutique
+**Build:**
 
-- [alpine, distroless or scratch?](https://medium.com/google-cloud/alpine-distroless-or-scratch-caac35250e0b)
-- [Platform Engineering in action: Deploy the Online Boutique sample apps with Score and Humanitec](https://medium.com/p/d99101001e69)
-- [The new Kubernetes Gateway API with Istio and Anthos Service Mesh (ASM)](https://medium.com/p/9d64c7009cd)
-- [Use Azure Redis Cache with the Online Boutique sample on AKS](https://medium.com/p/981bd98b53f8)
-- [Sail Sharp, 8 tips to optimize and secure your .NET containers for Kubernetes](https://medium.com/p/c68ba253844a)
-- [Deploy multi-region application with Anthos and Google cloud Spanner](https://medium.com/google-cloud/a2ea3493ed0)
-- [Use Google Cloud Memorystore (Redis) with the Online Boutique sample on GKE](https://medium.com/p/82f7879a900d)
-- [Use Helm to simplify the deployment of Online Boutique, with a Service Mesh, GitOps, and more!](https://medium.com/p/246119e46d53)
-- [How to reduce microservices complexity with Apigee and Anthos Service Mesh](https://cloud.google.com/blog/products/application-modernization/api-management-and-service-mesh-go-together)
-- [gRPC health probes with Kubernetes 1.24+](https://medium.com/p/b5bd26253a4c)
-- [Use Google Cloud Spanner with the Online Boutique sample](https://medium.com/p/f7248e077339)
-- [Seamlessly encrypt traffic from any apps in your Mesh to Memorystore (redis)](https://medium.com/google-cloud/64b71969318d)
-- [Strengthen your app's security with Cloud Service Mesh and Anthos Config Management](https://cloud.google.com/service-mesh/docs/strengthen-app-security)
-- [From edge to mesh: Exposing service mesh applications through GKE Ingress](https://cloud.google.com/architecture/exposing-service-mesh-apps-through-gke-ingress)
-- [Take the first step toward SRE with Cloud Operations Sandbox](https://cloud.google.com/blog/products/operations/on-the-road-to-sre-with-cloud-operations-sandbox)
-- [Deploying the Online Boutique sample application on Cloud Service Mesh](https://cloud.google.com/service-mesh/docs/onlineboutique-install-kpt)
-- [Anthos Service Mesh Workshop: Lab Guide](https://codelabs.developers.google.com/codelabs/anthos-service-mesh-workshop)
-- [KubeCon EU 2019 - Reinventing Networking: A Deep Dive into Istio's Multicluster Gateways - Steve Dake, Independent](https://youtu.be/-t2BfT59zJA?t=982)
-- Google Cloud Next'18 SF
-  - [Day 1 Keynote](https://youtu.be/vJ9OaAqfxo4?t=2416) showing GKE On-Prem
-  - [Day 3 Keynote](https://youtu.be/JQPOPV_VH5w?t=815) showing Stackdriver
-    APM (Tracing, Code Search, Profiler, Google Cloud Build)
-  - [Introduction to Service Management with Istio](https://www.youtube.com/watch?v=wCJrdKdD6UM&feature=youtu.be&t=586)
-- [Google Cloud Next'18 London – Keynote](https://youtu.be/nIq2pkNcfEI?t=3071)
-  showing Stackdriver Incident Response Management
-- [Microservices demo showcasing Go Micro](https://github.com/go-micro/demo)
+```bash
+docker build -t boutique-loadgen:local ./src/loadgenerator
+```
+
+**Run Locust (headless) against the frontend:**
+
+```bash
+docker run --rm \
+  -e FRONTEND_ADDR="$FRONTEND_IP" \
+  -e USERS=20 \
+  -e RATE=5 \
+  boutique-loadgen:local
+```
+
+**Stop:** `Ctrl+C`
+
+#### 5) Automated load generator on a GCE VM (Terraform)
+
+**Go to Terraform folder:**
+
+```bash
+cd infra/loadgen-vm
+terraform init
+```
+
+**Create/update terraform.tfvars:**
+
+```hcl
+project_id       = "m2-cloud-computing-478123"
+region           = "europe-west6"
+zone             = "europe-west6-a"
+frontend_addr    = "34.65.171.116"   # IMPORTANT: replace with the actual FRONTEND_IP
+users            = 20
+rate             = 5
+duration         = "2m"
+export_csv       = true
+enable_locust_ui = false
+use_spot         = true
+```
+
+**Apply:**
+
+```bash
+terraform apply -auto-approve
+```
+
+**SSH + verify:**
+
+```bash
+gcloud compute ssh loadgen-vm --zone europe-west6-a
+docker ps
+docker logs -f loadgen
+```
+
+**If CSV export enabled:**
+
+```bash
+ls -lh /var/locust
+```
+
+**Copy results back to Cloud Shell:**
+
+```bash
+exit
+gcloud compute scp --recurse loadgen-vm:/var/locust ./locust-results-vm --zone europe-west6-a
+```
+
+#### 6) Locust UI mode (optional)
+
+**In terraform.tfvars:**
+
+```hcl
+enable_locust_ui = true
+```
+
+**Apply:**
+
+```bash
+terraform apply -auto-approve
+```
+
+**Get VM public IP:**
+
+```bash
+terraform output loadgen_external_ip
+```
+
+**Open:**
+
+```
+http://<VM_EXTERNAL_IP>:8089
+```
+
+#### 7) Cleanup
+
+**Destroy load generator VM + firewall rules:**
+
+```bash
+cd infra/loadgen-vm
+terraform destroy -auto-approve
+```
+
+**Delete Online Boutique:**
+
+```bash
+cd ~/microservices-demo
+kubectl delete -k kustomize/overlays/m2-gke-standard-small
+```
+
+**Delete GKE cluster:**
+
+```bash
+gcloud container clusters delete boutique-cluster
+```
+
+#### Notes:
+
+- Overlay `m2-gke-standard-small`:
+  - deletes in-cluster loadgenerator (Deployment + ServiceAccount)
+  - reduces CPU requests for adservice and recommendationservice
+- Load generator VM runs Locust automatically from a startup script and can export CSV to `/var/locust`
+
+### SECTION 2 — Reproducibility: Manual Canary release with Istio (adservice v1/v2)
+
+#### Prerequisites
+
+- Online Boutique running on GKE
+- Istio installed
+- Sidecar injection enabled in default:
+
+```bash
+kubectl label namespace default istio-injection=enabled --overwrite
+```
+
+#### 1) Build & push adservice:v2 with Google Cloud Build (`cloudbuild.yaml`):
+
+```bash
+export IMAGE_URI="europe-west6-docker.pkg.dev/m2-cloud-computing-478123/online-boutique/adservice:v2"
+gcloud builds submit ./src/adservice --tag "$IMAGE_URI"
+```
+
+#### 2) Deploy canary resources (v1 + v2 + Istio routing)
+
+```bash
+kubectl apply -k kustomize/overlays/canary-adservice
+kubectl get pods -l app=adservice
+kubectl get virtualservice adservice -o yaml
+kubectl get destinationrule adservice -o yaml
+```
+
+#### 3) Generate traffic (to observe split)
+
+**Example (local Locust):**
+
+```bash
+FRONTEND_IP=$(kubectl get svc frontend-external -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+# docker run --rm -e FRONTEND_ADDR="$FRONTEND_IP" -e USERS=40 -e RATE=5 boutique-loadgen:local
+
+cd infra/loadgen-vm
+terraform init
+terraform apply -auto-approve
+```
+
+#### 4) Verify the split (75/25)
+
+**Pick one:**
+
+- **Kiali:** Graph → namespace default → filter adservice → confirm ~75% v1 / ~25% v2.
+<!-- - **Logs (quick check):**
+
+```bash
+kubectl logs -l app=adservice,version=v1 --since=5m | wc -l
+kubectl logs -l app=adservice,version=v2 --since=5m | wc -l
+``` -->
+
+#### 5) Promote v2 to 100%
+
+Update VirtualService weights (in overlay) to v1=0, v2=100 and apply:
+
+```bash
+kubectl apply -k kustomize/overlays/canary-adservice
+```
+
+**Optional:** scale down v1 once 100% is on v2:
+
+```bash
+kubectl scale deploy adservice --replicas=0
+```
+
+#### 6) Rollback to v1
+
+Set weights back to v1=100, v2=0 and apply:
+
+```bash
+kubectl apply -k kustomize/overlays/canary-adservice
+```
+
+**If v1 was scaled down:**
+
+```bash
+kubectl scale deploy adservice --replicas=1
+```
+
+#### 7) Cleanup
+
+```bash
+kubectl delete -k kustomize/overlays/canary-adservice
+```
+
+### SECTION 3 — Reproducibility: Automated Canary + Rollback with Flagger (adservice v3)
+
+#### 0) Prerequisites
+
+- Online Boutique deployed and healthy
+- Istio installed + sidecar injection enabled on default
+- Prometheus running (Istio telemetry available)
+- Flagger installed (CRDs + controller)
+
+**Quick checks:**
+
+```bash
+kubectl get pods -n istio-system | egrep 'istiod|prometheus'
+kubectl get crd | grep flagger
+kubectl get pods -A | grep flagger
+```
+
+#### 1) Set stable baseline = v2 (primary)
+
+```bash
+PROJECT_ID="m2-cloud-computing-478123"
+IMAGE_V2="europe-west6-docker.pkg.dev/${PROJECT_ID}/online-boutique/adservice:v2"
+
+kubectl -n default set image deploy/adservice server="$IMAGE_V2"
+kubectl -n default rollout status deploy/adservice
+```
+
+#### 2) Remove manual Istio canary objects (avoid conflicts)
+
+**If we previously created our own VirtualService/DestinationRule:**
+
+```bash
+kubectl delete virtualservice adservice --ignore-not-found
+kubectl delete destinationrule adservice --ignore-not-found
+```
+
+#### 3) Apply Flagger setup for adservice
+
+**Apply your Flagger overlay:**
+
+```bash
+kubectl apply -k kustomize/overlays/flagger-adservice
+
+# or apply the canary directly:
+kubectl apply -f kustomize/overlays/flagger-adservice/adservice-canary.yaml
+```
+
+**Verify Flagger created services and routing:**
+
+```bash
+kubectl get canary adservice
+kubectl get svc | grep adservice
+kubectl get virtualservice,destinationrule | grep adservice
+```
+
+**Expected:**
+- `adservice-primary` and `adservice-canary` exist
+- Flagger-managed VirtualService exists for host `adservice`
+
+#### 4) Start sustained traffic (required for metrics)
+
+Run the load generator continuously (Locust VM or local).
+
+**(Terraform VM approach):**
+
+```bash
+cd infra/loadgen-vm
+terraform init
+terraform apply -auto-approve"
+```
+
+**Check Locust:**
+
+```bash
+gcloud compute ssh loadgen-vm --zone europe-west6-a --command "docker ps"
+```
+
+#### 5) Create defective v3 + build/push
+
+**Code idea:** add artificial delay in `getAds(...)` and handle `InterruptedException`.
+
+**Build/push with Cloud Build:**
+
+```bash
+cd ~/microservices-demo
+PROJECT_ID="m2-cloud-computing-478123"
+IMAGE_V3="europe-west6-docker.pkg.dev/${PROJECT_ID}/online-boutique/adservice:v3"
+
+gcloud builds submit . \
+  --config cloudbuild.yaml \
+  --substitutions=_IMAGE_URI="$IMAGE_V3"
+```
+
+#### 6) Trigger Flagger analysis (deploy v3)
+
+```bash
+kubectl -n default set image deploy/adservice server="$IMAGE_V3"
+```
+
+**Watch progression:**
+
+```bash
+kubectl get canary adservice -w
+kubectl describe canary adservice | tail -n 60
+```
+
+#### 7) Expected outcome: automatic rollback
+
+With sustained traffic, Flagger should:
+- shift traffic gradually to canary
+- detect bad metrics ( request duration too high)
+- rollback and route traffic back to `adservice-primary`
+
+**Confirm rollback:**
+
+```bash
+kubectl describe canary adservice | egrep -i "failed|rollback|promotion|weight"
+kubectl get pods | grep adservice
+```
+
+#### 8) Reset / Retest
+
+Ensure traffic is still running.
+
+**Re-apply v2 baseline:**
+
+```bash
+kubectl -n default set image deploy/adservice server="$IMAGE_V2"
+kubectl rollout status deploy/adservice
+```
+
+**Re-deploy v3 to trigger canary again:**
+
+```bash
+kubectl -n default set image deploy/adservice server="$IMAGE_V3"
+```
+
+#### 9) Cleanup (optional)
+
+**Stop load generator:**
+
+```bash
+cd infra/loadgen-vm
+terraform destroy -auto-approve
+```
+
+**Remove Flagger objects (optional):**
+
+```bash
+kubectl delete canary adservice --ignore-not-found
+kubectl delete svc adservice-primary adservice-canary --ignore-not-found
+kubectl delete virtualservice adservice --ignore-not-found
+kubectl delete destinationrule adservice-primary adservice-canary --ignore-not-found
+```
+
+### SECTION 4 — Reproducibility: Autoscaling experiment (HPA + Cluster Autoscaler)
+
+This section assumes the autoscaling configuration (HPA overlay / manifests) already exists in the repo. The goal here is to re-run the experiment and capture evidence.
+
+#### A) Validate prerequisites (metrics + frontend requests)
+
+HPA requires working metrics. These must return values:
+
+```bash
+kubectl top pods
+kubectl top nodes
+```
+
+**Check that frontend has CPU requests set (CPU HPA uses CPU usage as a % of requests):**
+
+```bash
+kubectl -n default get deploy frontend -o jsonpath='{.spec.template.spec.containers[0].resources}{"\n"}'
+```
+
+#### B) Apply autoscaling config (HPA on frontend)
+
+**Apply the autoscaling overlay:**
+
+```bash
+kubectl apply -k kustomize/overlays/autoscaling-frontend
+```
+
+**Verify HPA is created and targeting frontend:**
+
+```bash
+kubectl get hpa
+kubectl describe hpa frontend-hpa
+```
+
+**Watch scaling live:**
+
+```bash
+kubectl get hpa frontend-hpa -w
+kubectl get pods -l app=frontend -w
+```
+
+#### C) Enable GKE Cluster Autoscaler (node pool)
+
+**Identify the node pool name (don't assume):**
+
+```bash
+CLUSTER_NAME=boutique-cluster
+ZONE=europe-west6-a
+
+gcloud container node-pools list --cluster "$CLUSTER_NAME" --zone "$ZONE"
+```
+
+**Enable autoscaling (example min/max :3 / 6):**
+
+```bash
+POOL_NAME=default-pool
+
+gcloud container node-pools update "$POOL_NAME" \
+  --cluster "$CLUSTER_NAME" \
+  --zone "$ZONE" \
+  --enable-autoscaling \
+  --min-nodes 3 \
+  --max-nodes 6
+```
+
+**Validate scale-out under pressure (while load runs):**
+
+```bash
+kubectl get nodes -w
+kubectl get events --sort-by=.lastTimestamp | tail -n 30
+```
+
+**Expected behavior:**
+- HPA increases frontend replicas under load
+- if pods become Pending, Cluster Autoscaler adds nodes
+- pods schedule once capacity exists
+
+#### D) Re-run load tests (prove autoscaling works)
+
+Use the same load generator method as before (local Docker Locust or Terraform VM). For the VM approach, increase load:
+
+- baseline (20 users)
+- 100 users
+- 300 users
+- 400+ users
+
+**Example high-load configuration (Terraform):**
+
+```hcl
+users = 400
+rate = 20
+duration = "5m"
+export_csv = true
+```
+
+**Run:**
+
+```bash
+cd infra/loadgen-vm
+terraform apply -auto-approve
+```
+
+**Copy CSV results:**
+
+```bash
+gcloud compute scp --recurse loadgen-vm:/var/locust ./locust-results-autoscaling --zone europe-west6-a
+```
+
+#### Cleanup
+
+**Remove autoscaling overlay:**
+
+```bash
+kubectl delete -k kustomize/overlays/autoscaling-frontend
+```
+
+**Disable node pool autoscaling:**
+
+```bash
+gcloud container node-pools update "$POOL_NAME" \
+  --cluster "$CLUSTER_NAME" \
+  --zone "$ZONE" \
+  --no-enable-autoscaling
+```
