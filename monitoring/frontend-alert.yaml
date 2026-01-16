@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: frontend-saturation-alert
+  namespace: monitoring
+  labels:
+    release: my-monitoring  # Ensuring this matches your release name
+spec:
+  groups:
+  - name: boutique-alerts
+    rules:
+    - alert: FrontendCPUHigh
+      # Lowered to 0.05 (50m) to trigger during this failure state
+      expr: sum(rate(container_cpu_usage_seconds_total{container="server",pod=~"frontend-.*"}[1m])) > 0.05
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Frontend Saturation Detected"
+        description: "Frontend is under heavy load and failing to process requests efficiently."
