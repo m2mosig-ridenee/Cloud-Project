@@ -158,37 +158,37 @@ public final class AdService {
     Ad hairdryer =
         Ad.newBuilder()
             .setRedirectUrl("/product/2ZYFJ3GM2N")
-            .setText("Hairdryer for sale. 50% off.")
+            .setText("V2-Hairdryer for sale. 50% off.")
             .build();
     Ad tankTop =
         Ad.newBuilder()
             .setRedirectUrl("/product/66VCHSJNUP")
-            .setText("Tank top for sale. 20% off.")
+            .setText("V2-Tank top for sale. 20% off.")
             .build();
     Ad candleHolder =
         Ad.newBuilder()
             .setRedirectUrl("/product/0PUK6V6EV0")
-            .setText("Candle holder for sale. 30% off.")
+            .setText("V2-Candle holder for sale. 30% off.")
             .build();
     Ad bambooGlassJar =
         Ad.newBuilder()
             .setRedirectUrl("/product/9SIQT8TOJO")
-            .setText("Bamboo glass jar for sale. 10% off.")
+            .setText("V2-Bamboo glass jar for sale. 10% off.")
             .build();
     Ad watch =
         Ad.newBuilder()
             .setRedirectUrl("/product/1YMWWN1N4O")
-            .setText("Watch for sale. Buy one, get second kit for free")
+            .setText("V2-Watch for sale. Buy one, get second kit for free")
             .build();
     Ad mug =
         Ad.newBuilder()
             .setRedirectUrl("/product/6E92ZMYYFZ")
-            .setText("Mug for sale. Buy two, get third one for free")
+            .setText("V2-Mug for sale. Buy two, get third one for free")
             .build();
     Ad loafers =
         Ad.newBuilder()
             .setRedirectUrl("/product/L9ECAV7KIM")
-            .setText("Loafers for sale. Buy one, get second one for free")
+            .setText("V2-Loafers for sale. Buy one, get second one for free")
             .build();
     return ImmutableListMultimap.<String, Ad>builder()
         .putAll("clothing", tankTop)
