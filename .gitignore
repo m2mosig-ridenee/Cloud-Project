@@ -26,3 +26,11 @@ obj/
 pkg/
 release/wi-kubernetes-manifests.yaml
 vendor/
+
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+crash.*.log
+.terraform.lock.hcl
